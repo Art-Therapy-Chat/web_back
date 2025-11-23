@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+openai
+pydantic
+pillow
+chromadb
+sentence-transformers
+transformers
+accelerate
+safetensors
+torch
+python-dotenv
+peft
