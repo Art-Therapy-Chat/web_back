@@ -8,6 +8,15 @@ from pydantic import BaseModel
 from caption import generate_caption
 from model import generate_with_qwen
 from fastapi.middleware.cors import CORSMiddleware
+import logging
+import json
+
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 # CORS 설정
@@ -32,7 +41,14 @@ class CaptionRequest(BaseModel):
 
 @app.post("/caption")
 def caption(req: CaptionRequest):
+    logger.info("=" * 80)
+    logger.info("📸 [CAPTION] 이미지 캡션 생성 시작")
+    logger.info(f"입력 이미지 크기: {len(req.image_base64)} bytes")
+    
     caption = generate_caption(req.image_base64)
+    
+    logger.info(f"✅ [CAPTION] 생성된 캡션: {caption}")
+    logger.info("=" * 80)
     return {"caption": caption}
 
 # ----------------------------- #
@@ -44,7 +60,23 @@ class RagRequest(BaseModel):
 
 @app.post("/rag")
 def rag_search_api(req: RagRequest):
+    logger.info("=" * 80)
+    logger.info("🔍 [RAG] RAG 검색 시작")
+    logger.info(f"입력 캡션: {req.caption}")
+    logger.info(f"이미지 타입: {req.image_type}")
+    
     result = rag.query(req.caption, req.image_type)
+    
+    logger.info(f"✅ [RAG] 검색 완료")
+    logger.info(f"재작성된 쿼리: {result.get('rewritten_queries', [])}")
+    logger.info(f"검색된 문서 수: {len(result.get('rag_docs', []))}")
+    
+    # 각 문서의 내용 출력
+    for idx, doc in enumerate(result.get('rag_docs', []), 1):
+        logger.info(f"\n📄 문서 {idx}:")
+        logger.info(f"  내용: {doc[:200]}..." if len(doc) > 200 else f"  내용: {doc}")
+    
+    logger.info("=" * 80)
     return result
 
 # ----------------------------- #
@@ -57,6 +89,12 @@ class InterpretSingle(BaseModel):
 
 @app.post("/interpret_single")
 def interpret_single(req: InterpretSingle):
+    logger.info("=" * 80)
+    logger.info("🧠 [INTERPRET_SINGLE] 개별 해석 시작")
+    logger.info(f"이미지 타입: {req.image_type}")
+    logger.info(f"입력 캡션: {req.caption}")
+    logger.info(f"RAG 문서 수: {len(req.rag_docs)}")
+    
     prompt = f"""
         You are an HTP (House-Tree-Person) psychological interpretation expert.
         
@@ -77,9 +115,14 @@ def interpret_single(req: InterpretSingle):
         - If you output any English at all, even a single word, the answer is invalid.
         - 반드시 한국어로 작성하세요.
     """
+    
+    logger.info(f"\n📝 프롬프트 길이: {len(prompt)} characters")
 
     result = generate_with_qwen(prompt)
-    print(result)
+    
+    logger.info(f"✅ [INTERPRET_SINGLE] 해석 완료")
+    logger.info(f"생성된 해석: {result}")
+    logger.info("=" * 80)
     return {"interpretation": result}
 
 # ----------------------------- #
@@ -93,12 +136,22 @@ class QuestionReq(BaseModel):
 
 @app.post("/questions")
 def questions(req: QuestionReq):
+    logger.info("=" * 80)
+    logger.info("❓ [QUESTIONS] 추가 질문 생성 시작")
+    logger.info(f"대화 기록 수: {len(req.conversation)}")
+    
+    for idx, msg in enumerate(req.conversation[-3:], 1):  # 최근 3개만 로깅
+        logger.info(f"  메시지 {idx}: {msg.get('role')} - {msg.get('content')[:100]}...")
+    
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=req.conversation
     )
-
-    return {"question": response.choices[0].message.content}
+    
+    question = response.choices[0].message.content
+    logger.info(f"✅ [QUESTIONS] 생성된 질문: {question}")
+    logger.info("=" * 80)
+    return {"question": question}
 
 # ----------------------------- #
 # 5) 최종 해석 (Qwen + LoRA)
@@ -109,6 +162,13 @@ class InterpretFinal(BaseModel):
 
 @app.post("/interpret_final")
 def interpret_final(req: InterpretFinal):
+    logger.info("=" * 80)
+    logger.info("🎯 [INTERPRET_FINAL] 최종 해석 생성 시작")
+    logger.info(f"집 해석: {req.single_results.get('house', '없음')[:100]}...")
+    logger.info(f"나무 해석: {req.single_results.get('tree', '없음')[:100]}...")
+    logger.info(f"사람 해석: {req.single_results.get('person', '없음')[:100]}...")
+    logger.info(f"대화 기록 수: {len(req.conversation)}")
+    
     prompt = f"""
 당신은 전문 심리상담사입니다.
 
@@ -126,5 +186,12 @@ def interpret_final(req: InterpretFinal):
 
 위 정보를 종합한 최종 HTP 해석을 5문단으로 작성하세요. 반드시 한글로 작성하세요. rag에 포함된 설명 또한 영어가 있을경우 한글로 번역 후 작성하세요.
     """
+    
+    logger.info(f"📝 최종 프롬프트 길이: {len(prompt)} characters")
+    
     result = generate_with_qwen(prompt)
+    
+    logger.info(f"✅ [INTERPRET_FINAL] 최종 해석 완료")
+    logger.info(f"생성된 최종 해석 (처음 200자): {result[:200]}...")
+    logger.info("=" * 80)
     return {"final": result}
