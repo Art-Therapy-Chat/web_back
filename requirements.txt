@@ -11,3 +11,7 @@ safetensors
 torch
 python-dotenv
 peft
+langchain
+langchain-community
+langchain-core
+langchain-openai

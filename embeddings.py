@@ -2,8 +2,8 @@
 import torch
 from transformers import AutoTokenizer, AutoModel
 from sentence_transformers import CrossEncoder
-from langchain.vectorstores import Chroma
-from langchain.embeddings.base import Embeddings
+from langchain_community.vectorstores import Chroma
+from langchain_core.embeddings import Embeddings
 
 
 # -------------------------------
