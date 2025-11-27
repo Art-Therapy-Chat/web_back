@@ -56,19 +56,31 @@ def caption(req: CaptionRequest):
 # ----------------------------- #
 # 2) 멀티쿼리 기반 RAG 검색
 # ----------------------------- #
+
+# 영어→한국어 매핑
+IMAGE_TYPE_MAP = {
+    "house": "집",
+    "tree": "나무",
+    "person": "사람"
+}
+
 class RagRequest(BaseModel):
     caption: str
-    image_type: str    # "집" | "나무" | "사람"
+    image_type: str    # "집" | "나무" | "사람" 또는 "house" | "tree" | "person"
 
 @app.post("/rag")
 def rag_search_api(req: RagRequest):
     logger.info("=" * 80)
     logger.info("🔍 [RAG] RAG 검색 시작")
     logger.info(f"입력 캡션: {req.caption}")
-    logger.info(f"이미지 타입: {req.image_type}")
+    logger.info(f"이미지 타입 (원본): {req.image_type}")
+    
+    # 영어 타입이면 한국어로 변환
+    image_type_kr = IMAGE_TYPE_MAP.get(req.image_type, req.image_type)
+    logger.info(f"이미지 타입 (변환됨): {image_type_kr}")
     
     try:
-        result = rag.query(req.caption, req.image_type)
+        result = rag.query(req.caption, image_type_kr)
         
         logger.info(f"✅ [RAG] 검색 완료")
         logger.info(f"재작성된 쿼리: {result.get('rewritten_queries', [])}")
