@@ -19,13 +19,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
-# CORS 설정
+# CORS 설정 - 더 명시적으로 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 프론트엔드 주소
+    allow_origins=["*"],  # 모든 출처 허용
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
 # -------------------------------------
@@ -65,19 +67,35 @@ def rag_search_api(req: RagRequest):
     logger.info(f"입력 캡션: {req.caption}")
     logger.info(f"이미지 타입: {req.image_type}")
     
-    result = rag.query(req.caption, req.image_type)
-    
-    logger.info(f"✅ [RAG] 검색 완료")
-    logger.info(f"재작성된 쿼리: {result.get('rewritten_queries', [])}")
-    logger.info(f"검색된 문서 수: {len(result.get('rag_docs', []))}")
-    
-    # 각 문서의 내용 출력
-    for idx, doc in enumerate(result.get('rag_docs', []), 1):
-        logger.info(f"\n📄 문서 {idx}:")
-        logger.info(f"  내용: {doc[:200]}..." if len(doc) > 200 else f"  내용: {doc}")
-    
-    logger.info("=" * 80)
-    return result
+    try:
+        result = rag.query(req.caption, req.image_type)
+        
+        logger.info(f"✅ [RAG] 검색 완료")
+        logger.info(f"재작성된 쿼리: {result.get('rewritten_queries', [])}")
+        logger.info(f"검색된 문서 수: {len(result.get('rag_docs', []))}")
+        
+        # 각 문서의 내용 출력
+        for idx, doc in enumerate(result.get('rag_docs', []), 1):
+            logger.info(f"\n📄 문서 {idx}:")
+            logger.info(f"  내용: {doc[:200]}..." if len(doc) > 200 else f"  내용: {doc}")
+        
+        logger.info("=" * 80)
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ [RAG] 검색 실패: {str(e)}")
+        logger.error(f"에러 타입: {type(e).__name__}")
+        import traceback
+        logger.error(f"스택 트레이스:\n{traceback.format_exc()}")
+        logger.info("=" * 80)
+        
+        # 빈 결과 반환 (에러 발생 시)
+        return {
+            "result": "검색 실패",
+            "rewritten_queries": [req.caption],
+            "rag_docs": [],
+            "error": str(e)
+        }
 
 # ----------------------------- #
 # 3) Qwen 로라 모델 개별 해석
@@ -95,6 +113,21 @@ def interpret_single(req: InterpretSingle):
     logger.info(f"입력 캡션: {req.caption}")
     logger.info(f"RAG 문서 수: {len(req.rag_docs)}")
     
+    # RAG 문서가 있으면 참고문헌으로 활용, 없으면 캡션만으로 해석
+    if req.rag_docs and len(req.rag_docs) > 0:
+        literature_section = f"""
+        Relevant literature from HTP research:
+        {req.rag_docs}
+        
+        Use this literature as reference for your interpretation.
+        """
+        logger.info("✅ RAG 문서를 참고하여 해석")
+    else:
+        literature_section = """
+        No specific literature available. Base your interpretation on general HTP psychological principles and the drawing characteristics observed in the caption.
+        """
+        logger.info("⚠️  RAG 문서 없음 - 일반적인 HTP 원리로 해석")
+    
     prompt = f"""
         You are an HTP (House-Tree-Person) psychological interpretation expert.
         
@@ -104,16 +137,16 @@ def interpret_single(req: InterpretSingle):
         Image caption:
         {req.caption}
         
-        Relevant literature:
-        {req.rag_docs}
+        {literature_section}
         
-        Write an HTP interpretation in exactly 3–5 sentences.
+        Write an HTP interpretation in exactly 3–5 sentences based on the drawing characteristics.
         
         IMPORTANT INSTRUCTIONS:
         - Your ENTIRE response MUST be in Korean only.
         - Do NOT output English words, translations, or explanations.
         - If you output any English at all, even a single word, the answer is invalid.
         - 반드시 한국어로 작성하세요.
+        - Focus on psychological insights related to the drawing characteristics.
     """
     
     logger.info(f"\n📝 프롬프트 길이: {len(prompt)} characters")
