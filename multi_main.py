@@ -56,31 +56,19 @@ def caption(req: CaptionRequest):
 # ----------------------------- #
 # 2) 멀티쿼리 기반 RAG 검색
 # ----------------------------- #
-
-# 영어→한국어 매핑
-IMAGE_TYPE_MAP = {
-    "house": "집",
-    "tree": "나무",
-    "person": "사람"
-}
-
 class RagRequest(BaseModel):
     caption: str
-    image_type: str    # "집" | "나무" | "사람" 또는 "house" | "tree" | "person"
+    image_type: str    # "집" | "나무" | "사람"
 
 @app.post("/rag")
 def rag_search_api(req: RagRequest):
     logger.info("=" * 80)
     logger.info("🔍 [RAG] RAG 검색 시작")
     logger.info(f"입력 캡션: {req.caption}")
-    logger.info(f"이미지 타입 (원본): {req.image_type}")
-    
-    # 영어 타입이면 한국어로 변환
-    image_type_kr = IMAGE_TYPE_MAP.get(req.image_type, req.image_type)
-    logger.info(f"이미지 타입 (변환됨): {image_type_kr}")
+    logger.info(f"이미지 타입: {req.image_type}")
     
     try:
-        result = rag.query(req.caption, image_type_kr)
+        result = rag.query(req.caption, req.image_type)
         
         logger.info(f"✅ [RAG] 검색 완료")
         logger.info(f"재작성된 쿼리: {result.get('rewritten_queries', [])}")
@@ -128,37 +116,35 @@ def interpret_single(req: InterpretSingle):
     # RAG 문서가 있으면 참고문헌으로 활용, 없으면 캡션만으로 해석
     if req.rag_docs and len(req.rag_docs) > 0:
         literature_section = f"""
-        Relevant literature from HTP research:
+        HTP 연구 참고 문헌 (한국어):
         {req.rag_docs}
         
-        Use this literature as reference for your interpretation.
+        위 문헌을 참고하여 해석하세요.
         """
         logger.info("✅ RAG 문서를 참고하여 해석")
     else:
         literature_section = """
-        No specific literature available. Base your interpretation on general HTP psychological principles and the drawing characteristics observed in the caption.
+        특정 참고 문헌이 없습니다. 일반적인 HTP 심리학 원리와 캡션에서 관찰된 그림 특징을 기반으로 해석하세요.
         """
         logger.info("⚠️  RAG 문서 없음 - 일반적인 HTP 원리로 해석")
     
     prompt = f"""
-        You are an HTP (House-Tree-Person) psychological interpretation expert.
+        당신은 HTP(집-나무-사람) 심리 검사 해석 전문가입니다.
         
-        Drawing type:
-        {req.image_type}
+        그림 유형: {req.image_type}
         
-        Image caption:
-        {req.caption}
+        그림 캡션 (영어): {req.caption}
         
         {literature_section}
         
-        Write an HTP interpretation in exactly 3–5 sentences based on the drawing characteristics.
+        그림의 특징을 바탕으로 HTP 심리 해석을 정확히 3~5문장으로 작성하세요.
         
-        IMPORTANT INSTRUCTIONS:
-        - Your ENTIRE response MUST be in Korean only.
-        - Do NOT output English words, translations, or explanations.
-        - If you output any English at all, even a single word, the answer is invalid.
-        - 반드시 한국어로 작성하세요.
-        - Focus on psychological insights related to the drawing characteristics.
+        중요 지침:
+        - 전체 응답은 반드시 한국어로만 작성하세요.
+        - 영어 단어, 번역, 설명을 포함하지 마세요.
+        - 영어가 단 한 단어라도 포함되면 무효입니다.
+        - 그림 특징과 관련된 심리학적 통찰에 집중하세요.
+        - 참고 문헌의 내용을 적절히 활용하여 전문적인 해석을 제공하세요.
     """
     
     logger.info(f"\n📝 프롬프트 길이: {len(prompt)} characters")

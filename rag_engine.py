@@ -141,105 +141,120 @@ class MultiQueryRetriever:
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+# RAG 응답 생성 클래스 정의 (Hugging Face 업로드된 모델 사용)
 class AdvancedConversationalRAG:
     def __init__(self, vectorstore, model_name="helena29/Qwen2.5_LoRA_for_HTP"):
-        self.history = []
-        self.query_rewriter = AdvancedQueryRewriter()
-        self.retriever = MultiQueryRetriever(vectorstore, self.query_rewriter)
-
-        print("🔥 Loading Qwen HTP Model:", model_name)
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.llm = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            device_map="auto",
-            torch_dtype="auto"
-        )
-        self.device = self.llm.device
-
-        self.response_template = """
-        You are a professional psychologist specializing in HTP interpretation.
-
-        User Question:
-        {query}
-
-        Relevant Information:
-        {context}
-
-        Guidelines:
-        1. If the user's question contains multiple queries, address each one clearly and separately.
-        2. Base your answer only on the provided information. If information is insufficient, honestly state that you don't know.
-        3. Provide your answer in Korean language.
-        4. If there are original sources in the provided information, cite them appropriately.
-        5. Explain possible psychological meanings in a professional manner.
-
-        Answer:
         """
+        Hugging Face에 업로드된 fine-tuned 모델을 사용한 대화형 RAG 시스템
+        Args:
+            vectorstore: 벡터 저장소
+            model_name: Hugging Face 모델 이름 (기본값: helena29/Qwen2.5_LoRA_for_HTP)
+        """
+        # history에 대화 저장
+        self.history = []
+        
+        # 쿼리 재생성기 (동일한 모델 사용)
+        self.query_rewriter = AdvancedQueryRewriter(model_name=model_name)
+        
+        # 각각의 검색어를 따로 검색한 뒤에 검색결과를 취합하는 멀티쿼리 리트리버
+        self.retriever = MultiQueryRetriever(vectorstore=vectorstore, query_rewriter=self.query_rewriter)
+        
+        # 답변 생성용 모델 로드 (쿼리 재작성기와 같은 모델 재사용)
+        print(f"✅ 답변 생성에도 동일 모델 사용: {model_name}")
+        self.tokenizer = self.query_rewriter.tokenizer
+        self.llm = self.query_rewriter.model
+        self.device = self.query_rewriter.device
+        print(f"✅ 모델 설정 완료! Device: {self.device}")
 
+        # 응답 생성을 위한 프롬프트 템플릿 (영어 버전)
+        self.response_template = """You are a professional psychologist specialized in HTP (House-Tree-Person) test interpretation.
+Your role is to provide clear, professional psychological interpretations based on drawing features.
+
+User Question: {query}
+
+Please provide your interpretation based on the following reference information:
+{context}
+
+Guidelines:
+1. If the user's question contains multiple queries, address each one clearly and separately.
+2. Base your answer only on the provided information. If information is insufficient, honestly state that you don't know.
+3. Provide your answer in Korean language.
+4. If there are original sources in the provided information, cite them appropriately.
+5. Explain possible psychological meanings in a professional manner.
+
+Answer:"""
+        
     def generate_response(self, prompt: str) -> str:
-
+        """Fine-tuned 모델로 응답 생성"""
+        # Qwen 형식으로 포맷팅
         messages = [
-            {"role": "system", "content": "HTP 검사 전문 심리학자 역할"},
+            {"role": "system", "content": "You are a professional psychologist specialized in HTP test interpretation."},
             {"role": "user", "content": prompt}
         ]
-
-        formatted = self.tokenizer.apply_chat_template(
+        
+        formatted_prompt = self.tokenizer.apply_chat_template(
             messages,
             tokenize=False,
             add_generation_prompt=True
         )
-
-        inputs = self.tokenizer(formatted, return_tensors="pt")
+        
+        # 토큰화 및 생성 (디바이스 명시적 지정)
+        inputs = self.tokenizer(formatted_prompt, return_tensors="pt")
+        
+        # ✅ 모든 입력 텐서를 모델과 같은 디바이스로 이동
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
-
+        
         with torch.no_grad():
             outputs = self.llm.generate(
                 **inputs,
                 max_new_tokens=1024,
                 temperature=0.3,
-                do_sample=True
+                do_sample=True,
+                top_p=0.9,
+                repetition_penalty=1.1,
+                pad_token_id=self.tokenizer.pad_token_id,
+                eos_token_id=self.tokenizer.eos_token_id
             )
+        
+        # 디코딩 (입력 부분 제외)
+        response = self.tokenizer.decode(outputs[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True)
+        return response.strip()
+        
+    def query(self, current_query: str, category: str) -> Dict:
+        # 관련 문서검색 (category 파라미터 추가)
+        docs, rewritten_queries = self.retriever.retrieve(current_query, category)
 
-        return self.tokenizer.decode(
-            outputs[0][inputs["input_ids"].shape[1]:],
-            skip_special_tokens=True
-        ).strip()
-
-    def query(self, current_query: str, category: str):
-        docs, rewritten_queries = self.retriever.retrieve(
-            current_query,
-            category=category
-        )
-
+        # 문서 내용을 컨텍스트로 변환
         if docs:
-            context = "\n\n".join(
-                [f"문서 {i+1}:\n{doc.page_content}" for i, doc in enumerate(docs)]
-            )
+            context = "\n\n".join([f"문서 {i+1}:\n{doc.page_content}" for i, doc in enumerate(docs)])
+            formatted_prompt = self.response_template.format(query=current_query, context=context)
         else:
-            context = "검색된 문서 없음"
+            # 문서 없으면 일반 지식 기반 답변 생성
+            formatted_prompt = f"User Question: {current_query}\n\nNo documents were retrieved, but please provide an appropriate answer based on your knowledge."
 
-        prompt = self.response_template.format(
-            query=current_query,
-            context=context
-        )
+        # Fine-tuned LLM으로 응답 생성
+        response = self.generate_response(formatted_prompt)
 
-        response = self.generate_response(prompt)
-
+        # 히스토리에 저장
         record = {
             "user_query": current_query,
             "rewritten_queries": rewritten_queries,
-            "retrieved_docs": [{"content": d.page_content} for d in docs],
-            "final_answer": response,
+            "retrieved_docs": [
+                {"content": d.page_content, "metadata": d.metadata} for d in docs
+            ],
+            "final_answer": response
         }
-
         self.history.append(record)
         self.retriever.history.append(record)
 
-        # 문서 내용을 문자열 리스트로 변환
+        # 문서 내용을 문자열 리스트로 변환 (프론트엔드 호환)
         rag_docs = [doc.page_content for doc in docs]
         
+        # 결과 반환
         return {
+            "query": current_query,
             "result": response,
             "rewritten_queries": rewritten_queries,
             "source_documents": docs,
-            "rag_docs": rag_docs  # 프론트엔드 호환성
+            "rag_docs": rag_docs  # 프론트엔드가 사용하는 필드
         }
