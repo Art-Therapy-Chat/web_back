@@ -234,8 +234,12 @@ class AdvancedConversationalRAG:
         self.history.append(record)
         self.retriever.history.append(record)
 
+        # 문서 내용을 문자열 리스트로 변환
+        rag_docs = [doc.page_content for doc in docs]
+        
         return {
             "result": response,
             "rewritten_queries": rewritten_queries,
-            "source_documents": docs
+            "source_documents": docs,
+            "rag_docs": rag_docs  # 프론트엔드 호환성
         }
