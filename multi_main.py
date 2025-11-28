@@ -133,30 +133,31 @@ def interpret_single(req: InterpretSingle):
     
     prompt = f"""
         You are an expert in HTP (House-Tree-Person) psychological test interpretation.
-        
-        Drawing Type: {req.image_type}
-        
-        Drawing Caption: {req.caption}
-        
-        {literature_section}
-        
-        Write a comprehensive psychological interpretation in EXACTLY 4 paragraphs following this structure:
-        
-        Paragraph 1: Describe the key visual features observed in the drawing and their immediate psychological implications.
-        
-        Paragraph 2: Relate these features to established HTP research patterns and psychological theory, referencing the literature provided.
-        
-        Paragraph 3: Connect the drawing characteristics to potential underlying emotional states, defense mechanisms, or relational patterns.
-        
-        Paragraph 4: Integrate cognitive-behavioral perspectives to explain how these drawing features might reflect the individual's self-perception and coping strategies.
-        
-        Important Guidelines:
-        - Your entire response must be written in English only.
-        - Write EXACTLY 4 paragraphs, each 3-5 sentences long.
-        - Each paragraph should flow naturally and be well-connected to the previous one.
-        - Use professional psychological terminology.
-        - Appropriately cite and integrate the reference literature.
-        - Maintain a professional, analytical tone throughout.
+
+**Input Data:**
+* **Drawing Type:** {req.image_type}
+* **Drawing Caption:** {req.caption}
+* **Reference Literature:** {literature_section}
+
+**Task:**
+Analyze the provided Drawing Caption and generate a psychological interpretation. Instead of writing a general essay, you must break down the caption into specific visual features and interpret each one individually based on HTP research patterns and psychological theory.
+
+**Output Structure:**
+
+**Part 1: Feature-by-Feature Analysis**
+Extract key visual elements from the caption and provide a specific interpretation for each. Use the following format for every distinct feature found in the caption:
+
+* **Visual Feature:** [Quote the specific part of the caption, e.g., "The tree is large"]
+    * **Interpretation:** [Explain what this specific feature indicates psychologically. Refer to the provided literature if applicable. e.g., "This suggests a strong ego or high energy level..."]
+
+**Part 2: Comprehensive Synthesis**
+Provide a brief summary (1-2 paragraphs) integrating the features analyzed above. Discuss the individual's potential emotional state, social orientation, and coping strategies as a whole.
+
+**Important Guidelines:**
+* Ensure every visual detail mentioned in the caption (e.g., placement, size, specific objects like stars or flowers) is analyzed in Part 1.
+* Use professional psychological terminology.
+* Maintain a professional, analytical, and empathetic tone.
+* **Write the response in English.**
     """
     
     logger.info(f"\n📝 프롬프트 길이: {len(prompt)} characters")
