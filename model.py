@@ -12,6 +12,10 @@ def _load_model():
     
     if _model is None:
         print(f"🔥 Loading Qwen HTP Model: {_model_name}")
+        print(f"🔍 CUDA Available: {torch.cuda.is_available()}")
+        if torch.cuda.is_available():
+            print(f"🔍 CUDA Device: {torch.cuda.get_device_name(0)}")
+            print(f"🔍 CUDA Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
         
         # 토크나이저 로드
         _tokenizer = AutoTokenizer.from_pretrained(_model_name)
@@ -20,10 +24,11 @@ def _load_model():
         _model = AutoModelForCausalLM.from_pretrained(
             _model_name,
             device_map="auto",
-            torch_dtype="auto"
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
         )
         
-        print("✅ Qwen HTP Model loaded successfully!")
+        print(f"✅ Qwen HTP Model loaded successfully!")
+        print(f"✅ Model Device: {_model.device}")
     
     return _model, _tokenizer
 
@@ -36,20 +41,39 @@ def generate_with_qwen(prompt: str):
     # 모델 로드 (이미 로드되어 있으면 재사용)
     model, tokenizer = _load_model()
     
+    print("=" * 80)
+    print("📝 [PROMPT] 해석 생성 프롬프트:")
+    print("-" * 80)
+    print(prompt)
+    print("=" * 80)
+    
+    print(f"🔍 [generate_with_qwen] Model device: {model.device}")
+    
     # 입력 텐서 준비
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    inputs = tokenizer(prompt, return_tensors="pt")
+    
+    # 모든 입력을 모델과 같은 디바이스로 이동
+    inputs = {k: v.to(model.device) for k, v in inputs.items()}
+    
+    print(f"🔍 [generate_with_qwen] Input device: {inputs['input_ids'].device}")
     
     # 생성
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=200,
-        temperature=0.7
-    )
+    with torch.no_grad():
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=512,
+            temperature=0.7,
+            do_sample=True,
+            pad_token_id=tokenizer.pad_token_id,
+            eos_token_id=tokenizer.eos_token_id
+        )
     
     # 프롬프트 제거: 입력 토큰 이후만 추출
     input_len = inputs["input_ids"].shape[1]
     generated_ids = outputs[0][input_len:]
     
     result = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+    
+    print(f"✅ [generate_with_qwen] Generated {len(result)} characters")
     
     return result
