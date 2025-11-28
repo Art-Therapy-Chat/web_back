@@ -7,6 +7,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.documents import Document
+from embeddings import vectorstore, cross_encoder
 
 
 # ===============================================================
@@ -131,6 +132,14 @@ class MultiQueryRetriever:
                 if d.page_content not in seen:
                     seen.add(d.page_content)
                     all_docs.append(d)
+
+        # CrossEncoder 라랭킹 적용
+        # -------------------------------
+        if all_docs:
+            pairs = [(query, d.page_content) for d in all_docs]
+            scores = self.vectorstore.cross_encoder.predict(pairs)
+            reranked = sorted(zip(all_docs, scores), key=lambda x: x[1], reverse=True)
+            all_docs = [doc for doc, score in reranked]
 
         return all_docs, rewritten_queries
 
