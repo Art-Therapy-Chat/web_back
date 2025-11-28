@@ -96,6 +96,7 @@ class AdvancedQueryRewriter:
 class MultiQueryRetriever:
     def __init__(self, vectorstore, query_rewriter):
         self.vectorstore = vectorstore
+        self.cross_encoder = cross_encoder
         self.history = []
         self.query_rewriter = query_rewriter
 
@@ -137,7 +138,7 @@ class MultiQueryRetriever:
         # -------------------------------
         if all_docs:
             pairs = [(query, d.page_content) for d in all_docs]
-            scores = self.vectorstore.cross_encoder.predict(pairs)
+            scores = self.cross_encoder.predict(pairs)
             reranked = sorted(zip(all_docs, scores), key=lambda x: x[1], reverse=True)
             all_docs = [doc for doc, score in reranked]
 
@@ -259,7 +260,7 @@ Answer:"""
             ],
             "final_answer": response
         }
-        self.history.append(record)
+
         self.retriever.history.append(record)
 
         # 문서 내용을 문자열 리스트로 변환 (프론트엔드 호환)
