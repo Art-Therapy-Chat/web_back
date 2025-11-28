@@ -143,27 +143,32 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # RAG 응답 생성 클래스 정의 (Hugging Face 업로드된 모델 사용)
 class AdvancedConversationalRAG:
-    def __init__(self, vectorstore, model_name="helena29/Qwen2.5_LoRA_for_HTP"):
+    def __init__(self, vectorstore, query_model_name="gpt-4o", answer_model_name="helena29/Qwen2.5_LoRA_for_HTP"):
         """
         Hugging Face에 업로드된 fine-tuned 모델을 사용한 대화형 RAG 시스템
         Args:
             vectorstore: 벡터 저장소
-            model_name: Hugging Face 모델 이름 (기본값: helena29/Qwen2.5_LoRA_for_HTP)
+            query_model_name: 쿼리 재작성용 OpenAI 모델 이름 (기본값: gpt-4o)
+            answer_model_name: 답변 생성용 Hugging Face 모델 이름 (기본값: helena29/Qwen2.5_LoRA_for_HTP)
         """
         # history에 대화 저장
         self.history = []
         
-        # 쿼리 재생성기 (동일한 모델 사용)
-        self.query_rewriter = AdvancedQueryRewriter(model_name=model_name)
+        # 쿼리 재생성기 (OpenAI GPT 사용)
+        self.query_rewriter = AdvancedQueryRewriter(model_name=query_model_name)
         
         # 각각의 검색어를 따로 검색한 뒤에 검색결과를 취합하는 멀티쿼리 리트리버
         self.retriever = MultiQueryRetriever(vectorstore=vectorstore, query_rewriter=self.query_rewriter)
         
-        # 답변 생성용 모델 로드 (쿼리 재작성기와 같은 모델 재사용)
-        print(f"✅ 답변 생성에도 동일 모델 사용: {model_name}")
-        self.tokenizer = self.query_rewriter.tokenizer
-        self.llm = self.query_rewriter.model
-        self.device = self.query_rewriter.device
+        # 답변 생성용 모델 로드 (Hugging Face 모델 직접 로드)
+        print(f"✅ 답변 생성용 모델 로드 중: {answer_model_name}")
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.tokenizer = AutoTokenizer.from_pretrained(answer_model_name)
+        self.llm = AutoModelForCausalLM.from_pretrained(
+            answer_model_name,
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            device_map="auto"
+        )
         print(f"✅ 모델 설정 완료! Device: {self.device}")
 
         # 응답 생성을 위한 프롬프트 템플릿 (영어 버전)
