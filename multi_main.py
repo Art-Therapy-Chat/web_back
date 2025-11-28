@@ -140,13 +140,23 @@ def interpret_single(req: InterpretSingle):
         
         {literature_section}
         
-        Based on the drawing features, write a psychological interpretation of exactly 3-5 sentences.
+        Write a comprehensive psychological interpretation in EXACTLY 4 paragraphs following this structure:
+        
+        Paragraph 1: Describe the key visual features observed in the drawing and their immediate psychological implications.
+        
+        Paragraph 2: Relate these features to established HTP research patterns and psychological theory, referencing the literature provided.
+        
+        Paragraph 3: Connect the drawing characteristics to potential underlying emotional states, defense mechanisms, or relational patterns.
+        
+        Paragraph 4: Integrate cognitive-behavioral perspectives to explain how these drawing features might reflect the individual's self-perception and coping strategies.
         
         Important Guidelines:
         - Your entire response must be written in English only.
-        - Focus on psychological insights related to the drawing features.
-        - Appropriately utilize the content of the reference literature to provide a professional interpretation.
-        - Be clear, concise, and professional in your interpretation.
+        - Write EXACTLY 4 paragraphs, each 3-5 sentences long.
+        - Each paragraph should flow naturally and be well-connected to the previous one.
+        - Use professional psychological terminology.
+        - Appropriately cite and integrate the reference literature.
+        - Maintain a professional, analytical tone throughout.
     """
     
     logger.info(f"\n📝 프롬프트 길이: {len(prompt)} characters")
