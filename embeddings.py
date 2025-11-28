@@ -44,7 +44,7 @@ embeddings = MyEmbeddings(embed_model, embed_tokenizer, device=device)
 vectorstore = Chroma(
     collection_name="htp_collection",
     embedding_function=embeddings,
-    persist_directory="./chroma_store"
+    persist_directory="./chromaDB_store"
 )
 
 
