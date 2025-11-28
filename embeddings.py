@@ -44,11 +44,14 @@ embeddings = MyEmbeddings(embed_model, embed_tokenizer, device=device)
 vectorstore = Chroma(
     collection_name="htp_collection",
     embedding_function=embeddings,
-    persist_directory="./chromaDB_store"
+    persist_directory="./chroma_store"
 )
 
 
 # -------------------------------
 # CrossEncoder Reranker
 # -------------------------------
-cross_encoder = CrossEncoder("BAAI/bge-reranker-v2-m3")
+cross_encoder = CrossEncoder(
+    "HJUNN/bge_BCE_cross_encoder",
+    device=device
+)
