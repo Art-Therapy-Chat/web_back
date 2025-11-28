@@ -45,6 +45,7 @@ class CaptionRequest(BaseModel):
 def caption(req: CaptionRequest):
     logger.info("=" * 80)
     logger.info("📸 [CAPTION] 이미지 캡션 생성 시작")
+    logger.info("🤖 사용 모델: Florence-2-large")
     logger.info(f"입력 이미지 크기: {len(req.image_base64)} bytes")
     
     caption = generate_caption(req.image_base64)
@@ -64,6 +65,7 @@ class RagRequest(BaseModel):
 def rag_search_api(req: RagRequest):
     logger.info("=" * 80)
     logger.info("🔍 [RAG] RAG 검색 시작 (검색 전용 모드)")
+    logger.info("🤖 쿼리 재작성 모델: GPT-4o (OpenAI)")
     logger.info(f"입력 캡션: {req.caption}")
     logger.info(f"이미지 타입: {req.image_type}")
     
@@ -109,6 +111,7 @@ class InterpretSingle(BaseModel):
 def interpret_single(req: InterpretSingle):
     logger.info("=" * 80)
     logger.info("🧠 [INTERPRET_SINGLE] 개별 해석 시작")
+    logger.info("🤖 사용 모델: Qwen (helena29/Qwen2.5_LoRA_for_HTP)")
     logger.info(f"이미지 타입: {req.image_type}")
     logger.info(f"입력 캡션: {req.caption}")
     logger.info(f"RAG 문서 수: {len(req.rag_docs)}")
@@ -156,10 +159,41 @@ def interpret_single(req: InterpretSingle):
     return {"interpretation": result}
 
 # ----------------------------- #
-# 4) Qwen 모델로 추가 질문 생성 (영어)
+# 4) GPT 번역 API
 # ----------------------------- #
 from openai import OpenAI
 client = OpenAI()
+
+class TranslateRequest(BaseModel):
+    text: str
+
+@app.post("/translate")
+def translate(req: TranslateRequest):
+    """영어 텍스트를 한국어로 번역"""
+    logger.info("🌐 [TRANSLATE] 번역 시작")
+    logger.info(f"원문 (영어): {req.text[:100]}...")
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a professional translator. Translate the given English text to natural Korean. Only provide the translation, nothing else."},
+                {"role": "user", "content": req.text}
+            ],
+            temperature=0.3
+        )
+        
+        translated = response.choices[0].message.content
+        logger.info(f"번역 결과 (한국어): {translated[:100]}...")
+        return {"translated": translated}
+        
+    except Exception as e:
+        logger.error(f"❌ [TRANSLATE] 번역 실패: {str(e)}")
+        return {"translated": req.text}  # 실패시 원문 반환
+
+# ----------------------------- #
+# 5) Qwen 모델로 추가 질문 생성 (영어)
+# ----------------------------- #
 
 class QuestionReq(BaseModel):
     conversation: list
@@ -167,7 +201,8 @@ class QuestionReq(BaseModel):
 @app.post("/questions")
 def questions(req: QuestionReq):
     logger.info("=" * 80)
-    logger.info("❓ [QUESTIONS] 추가 질문 생성 시작 (Qwen 모델)")
+    logger.info("❓ [QUESTIONS] 추가 질문 생성 시작")
+    logger.info("🤖 사용 모델: Qwen (helena29/Qwen2.5_LoRA_for_HTP)")
     logger.info(f"대화 기록 수: {len(req.conversation)}")
     
     for idx, msg in enumerate(req.conversation[-3:], 1):  # 최근 3개만 로깅
@@ -201,7 +236,7 @@ Important Guidelines:
     return {"question": result}
 
 # ----------------------------- #
-# 5) 최종 해석 (GPT-4o)
+# 6) 최종 해석 (GPT-4o)
 # ----------------------------- #
 class InterpretFinal(BaseModel):
     single_results: dict
@@ -210,7 +245,8 @@ class InterpretFinal(BaseModel):
 @app.post("/interpret_final")
 def interpret_final(req: InterpretFinal):
     logger.info("=" * 80)
-    logger.info("🎯 [INTERPRET_FINAL] 최종 해석 생성 시작 (GPT-4o)")
+    logger.info("🎯 [INTERPRET_FINAL] 최종 해석 생성 시작")
+    logger.info("🤖 사용 모델: GPT-4o (OpenAI)")
     logger.info(f"집 해석: {req.single_results.get('house', '없음')[:100]}...")
     logger.info(f"나무 해석: {req.single_results.get('tree', '없음')[:100]}...")
     logger.info(f"사람 해석: {req.single_results.get('person', '없음')[:100]}...")
