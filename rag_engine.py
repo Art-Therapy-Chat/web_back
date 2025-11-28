@@ -112,7 +112,7 @@ class MultiQueryRetriever:
             out += "-" * 30 + "\n"
         return out
 
-    def retrieve(self, query: str, category: str, num_docs=3):
+    def retrieve(self, query: str, category: str, num_docs=5):
 
         history_text = self.build_history_text()
         rewritten_queries = self.query_rewriter.rewrite_query(history_text, query)
@@ -123,24 +123,35 @@ class MultiQueryRetriever:
         seen = set()
 
         for q in rewritten_queries:
+            # 1) 쿼리당 5개 검색
             docs = self.vectorstore.similarity_search(
                 q,
                 k=num_docs,
                 filter={"category": category}
             )
 
-            for d in docs:
-                if d.page_content not in seen:
-                    seen.add(d.page_content)
-                    all_docs.append(d)
+            if not docs:
+                continue
 
-        # CrossEncoder 라랭킹 적용
-        # -------------------------------
-        if all_docs:
-            pairs = [(query, d.page_content) for d in all_docs]
+            # 2) 쿼리별 CrossEncoder Top-2 추출
+            pairs = [(q, d.page_content) for d in docs]
             scores = self.cross_encoder.predict(pairs)
-            reranked = sorted(zip(all_docs, scores), key=lambda x: x[1], reverse=True)
-            all_docs = [doc for doc, score in reranked]
+
+            # numpy/torch 변환 처리
+            if hasattr(scores, "detach"):
+                scores = scores.detach().cpu().numpy()
+            scores = scores.squeeze().tolist()
+
+            reranked = sorted(zip(docs, scores), key=lambda x: x[1], reverse=True)
+    
+            # ★ 여기서 쿼리당 Top-2만 유지
+            top_docs = [doc for doc, score in reranked[:2]]
+
+            # 3) 최종 후보 리스트에 추가 (중복 제거)
+            for d in top_docs:
+                if d.page_content not in seen:
+                    all_docs.append(d)
+                    seen.add(d.page_content)
 
         return all_docs, rewritten_queries
 
